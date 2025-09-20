@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>JacobTube</title>
+</head>
+<body>
+    <nav>
+        {% if current_user.is_authenticated %}
+            Logged in as {{ current_user.username }} |
+            <a href="{{ url_for('logout') }}">Logout</a> |
+            <a href="{{ url_for('upload') }}">Upload</a> |
+            <a href="{{ url_for('channel', user_id=current_user.id) }}">My Channel</a>
+        {% else %}
+            <a href="{{ url_for('login') }}">Login</a> |
+            <a href="{{ url_for('signup') }}">Sign Up</a>
+        {% endif %}
+        <a href="{{ url_for('index') }}">Home</a>
+    </nav>
+    <hr>
+
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            <ul style="color:red;">
+                {% for message in messages %}
+                    <li>{{ message }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h2>{{ user.username }}'s Channel</h2>
+    <p>Subscribers: {{ user.subscriber_count() }}</p>
+
+    {% if current_user.is_authenticated and current_user.id != user.id %}
+        <form action="{{ url_for('subscribe', user_id=user.id) }}" method="POST">
+            {% if is_subscribed %}
+                <button type="submit">Unsubscribe</button>
+            {% else %}
+                <button type="submit">Subscribe</button>
+            {% endif %}
+        </form>
+    {% endif %}
+
+    <h3>Videos</h3>
+    <ul>
+        {% for video in videos %}
+            <li>
+                <a href="{{ url_for('watch', video_id=video.id) }}">{{ video.title }}</a>
+            </li>
+        {% endfor %}
+    </ul>
+{% endblock %}

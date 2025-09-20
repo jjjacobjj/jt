@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h1>Welcome to JacobTube</h1>
+    {% for video in videos %}
+        <div>
+            <h3><a href="{{ url_for('watch', video_id=video.id) }}">{{ video.title }}</a></h3>
+            <p>{{ video.description }}</p>
+        </div>
+    {% else %}
+        <p>No videos yet.</p>
+    {% endfor %}
+{% endblock %}
