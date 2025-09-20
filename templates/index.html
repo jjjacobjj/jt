@@ -1,13 +1,21 @@
 {% extends "base.html" %}
 
 {% block content %}
-    <h1>Welcome to JacobTube</h1>
+<h2>All Videos</h2>
+{% if videos %}
     {% for video in videos %}
-        <div>
-            <h3><a href="{{ url_for('watch', video_id=video.id) }}">{{ video.title }}</a></h3>
+        <div class="video-card">
+            <h3>{{ video.title }}</h3>
+            <p>Uploaded by: {{ video.user.username }}</p>
             <p>{{ video.description }}</p>
+            <video width="480" controls>
+                <source src="{{ url_for('static', filename=video.filename) }}" type="video/mp4">
+                Your browser does not support the video tag.
+            </video>
         </div>
-    {% else %}
-        <p>No videos yet.</p>
+        <hr>
     {% endfor %}
+{% else %}
+    <p>No videos found.</p>
+{% endif %}
 {% endblock %}
