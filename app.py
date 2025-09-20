@@ -1,6 +1,7 @@
 from flask import Flask, render_template, redirect, url_for, request, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from datetime import datetime
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///jacobtube.db'
@@ -17,7 +18,7 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(50), unique=True, nullable=False)
     email = db.Column(db.String(100), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
-    subscriber_count = db.Column(db.Integer, default=0)  # added subscriber_count
+    subscriber_count = db.Column(db.Integer, default=0)
 
 class Video(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -25,6 +26,15 @@ class Video(db.Model):
     filename = db.Column(db.String(100))
     description = db.Column(db.Text)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    comments = db.relationship('Comment', backref='video', lazy=True)
+
+class Comment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    content = db.Column(db.Text, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    video_id = db.Column(db.Integer, db.ForeignKey('video.id'))
+    user = db.relationship('User', backref='comments')
 
 # ===================== LOGIN HANDLERS =====================
 @login_manager.user_loader
@@ -74,10 +84,21 @@ def channel(user_id):
     videos = Video.query.filter_by(user_id=user.id).all()
     return render_template('channel.html', user=user, videos=videos)
 
-@app.route('/watch/<int:video_id>')
+@app.route('/watch/<int:video_id>', methods=['GET', 'POST'])
 def watch(video_id):
     video = Video.query.get_or_404(video_id)
-    return render_template('watch.html', video=video)
+    if request.method == 'POST':
+        if not current_user.is_authenticated:
+            flash('You must be logged in to comment.')
+            return redirect(url_for('login'))
+        content = request.form['content']
+        if content:
+            comment = Comment(content=content, user_id=current_user.id, video_id=video.id)
+            db.session.add(comment)
+            db.session.commit()
+            return redirect(url_for('watch', video_id=video.id))
+    comments = Comment.query.filter_by(video_id=video.id).order_by(Comment.timestamp.desc()).all()
+    return render_template('watch.html', video=video, comments=comments)
 
 if __name__ == "__main__":
     app.run(debug=True)
