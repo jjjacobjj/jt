@@ -1,26 +1,34 @@
-{% extends "base.html" %}
+{% extends 'base.html' %}
+
+{% block title %}{{ video.title }}{% endblock %}
 
 {% block content %}
-    <h1>{{ video.title }}</h1>
-    <video width="640" controls>
-        <source src="{{ url_for('static', filename='videos/' + video.filename) }}" type="video/mp4">
-        Your browser does not support the video tag.
-    </video>
-    <p>{{ video.description }}</p>
+<h1>{{ video.title }}</h1>
+<video width="640" height="360" controls>
+    <source src="{{ url_for('static', filename='videos/' + video.filename) }}" type="video/mp4">
+    Your browser does not support the video tag.
+</video>
+<p>{{ video.description }}</p>
 
-    <h2>Comments</h2>
-    {% if current_user.is_authenticated %}
-        <form method="POST">
-            <textarea name="comment" required></textarea><br>
-            <button type="submit">Post Comment</button>
-        </form>
-    {% else %}
-        <p><a href="{{ url_for('login') }}">Log in</a> to post a comment.</p>
-    {% endif %}
+<hr>
+<h2>Comments</h2>
 
+{% if current_user.is_authenticated %}
+<form method="POST" action="{{ url_for('watch', video_id=video.id) }}">
+    <textarea name="content" placeholder="Add a comment..." required></textarea><br>
+    <button type="submit">Post Comment</button>
+</form>
+{% else %}
+<p><a href="{{ url_for('login') }}">Log in</a> to comment.</p>
+{% endif %}
+
+<ul>
     {% for comment in comments %}
-        <p><strong>User {{ comment.user_id }}:</strong> {{ comment.content }}</p>
+    <li><strong>{{ comment.user.username }}</strong> ({{ comment.timestamp.strftime('%Y-%m-%d %H:%M') }}): {{ comment.content }}</li>
     {% else %}
-        <p>No comments yet.</p>
+    <li>No comments yet.</li>
     {% endfor %}
+</ul>
+
+<a href="{{ url_for('index') }}">Back to Home</a>
 {% endblock %}
