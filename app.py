@@ -7,7 +7,7 @@ from flask_migrate import Migrate
 app = Flask(__name__)
 
 # --- Database setup ---
-# Use PostgreSQL if DATABASE_URL is provided (Render), otherwise fallback to SQLite
+# Use PostgreSQL on Render (DATABASE_URL env var), otherwise SQLite locally
 if os.getenv("DATABASE_URL"):
     app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL").replace("postgres://", "postgresql://")
 else:
@@ -66,9 +66,8 @@ def index():
     )
 
 
-# --- Database create helper ---
-@app.before_first_request
-def create_tables():
+# --- Ensure database + tables exist ---
+with app.app_context():
     db.create_all()
 
 
