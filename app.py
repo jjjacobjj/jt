@@ -1,113 +1,82 @@
-from flask import Flask, render_template, redirect, url_for, request, flash
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, login_user, login_required, logout_user, current_user, UserMixin
-from werkzeug.security import generate_password_hash, check_password_hash
-from flask_migrate import Migrate
 import os
+from flask import Flask, render_template, request, redirect, url_for, flash
+from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "supersecretkey"
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///app.db"
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///JT.db"
+app.config["UPLOAD_FOLDER"] = "static/uploads"
 
 db = SQLAlchemy(app)
-migrate = Migrate(app, db)
 
-login_manager = LoginManager(app)
+# --- Login Setup ---
+login_manager = LoginManager()
+login_manager.init_app(app)
 login_manager.login_view = "login"
 
-
-# ========================
-# MODELS
-# ========================
-class User(UserMixin, db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(150), unique=True, nullable=False)
-    email = db.Column(db.String(150), unique=True, nullable=False)
-    password = db.Column(db.String(200), nullable=False)
-
-    videos = db.relationship("Video", backref="user", lazy=True)
-    comments = db.relationship("Comment", backref="user", lazy=True)
-
-
-class Video(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-
-
-class Comment(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    content = db.Column(db.Text, nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    video_id = db.Column(db.Integer, db.ForeignKey("video.id"), nullable=False)
-
-
-class Subscription(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    subscriber_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    subscribed_to_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-
-
-# ========================
-# LOGIN MANAGER
-# ========================
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
+# --- Models ---
+class User(db.Model, UserMixin):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(50), unique=True, nullable=False)
+    password = db.Column(db.String(200), nullable=False)
+    subscribers = db.Column(db.Integer, default=0)
+    videos = db.relationship("Video", backref="user", lazy=True)
 
-# ========================
-# ROUTES
-# ========================
+class Video(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    filename = db.Column(db.String(100), nullable=False)
+    title = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
 
+# --- Routes ---
 @app.route("/")
 def index():
-    videos = Video.query.all()
-    return render_template("index.html", videos=videos)
-
-
-@app.route("/videos")
-def videos():
-    videos = Video.query.all()
-    return render_template("videos.html", videos=videos)
-
+    query = request.args.get("q", "")
+    if query:
+        videos = Video.query.filter(Video.title.contains(query)).all()
+    else:
+        videos = Video.query.all()
+    return render_template("index.html", videos=videos, query=query)
 
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
     if request.method == "POST":
         username = request.form["username"]
-        email = request.form["email"]
-        password = generate_password_hash(request.form["password"])
+        password = request.form["password"]
 
-        if User.query.filter((User.username == username) | (User.email == email)).first():
-            flash("Username or email already exists", "danger")
+        if User.query.filter_by(username=username).first():
+            flash("Username already exists.")
             return redirect(url_for("signup"))
 
-        new_user = User(username=username, email=email, password=password)
+        hashed_pw = generate_password_hash(password, method="pbkdf2:sha256")
+        new_user = User(username=username, password=hashed_pw)
         db.session.add(new_user)
         db.session.commit()
-        flash("Account created! Please log in.", "success")
+        flash("Account created. Please log in.")
         return redirect(url_for("login"))
 
     return render_template("signup.html")
 
-
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        email = request.form["email"]
+        username = request.form["username"]
         password = request.form["password"]
 
-        user = User.query.filter_by(email=email).first()
+        user = User.query.filter_by(username=username).first()
         if user and check_password_hash(user.password, password):
             login_user(user)
             return redirect(url_for("index"))
-        else:
-            flash("Invalid login credentials", "danger")
-
+        flash("Invalid login.")
     return render_template("login.html")
-
 
 @app.route("/logout")
 @login_required
@@ -115,20 +84,39 @@ def logout():
     logout_user()
     return redirect(url_for("index"))
 
-
 @app.route("/upload", methods=["GET", "POST"])
 @login_required
 def upload():
     if request.method == "POST":
+        file = request.files["file"]
         title = request.form["title"]
-        new_video = Video(title=title, user_id=current_user.id)
-        db.session.add(new_video)
-        db.session.commit()
-        flash("Video uploaded!", "success")
-        return redirect(url_for("channel", username=current_user.username))
+        description = request.form["description"]
+
+        if file:
+            filename = secure_filename(file.filename)
+            path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+            file.save(path)
+
+            video = Video(filename=filename, title=title, description=description, user_id=current_user.id)
+            db.session.add(video)
+            db.session.commit()
+            return redirect(url_for("index"))
 
     return render_template("upload.html")
 
+@app.route("/watch/<int:video_id>")
+def watch(video_id):
+    video = Video.query.get_or_404(video_id)
+    return render_template("watch.html", video=video)
+
+@app.route("/delete/<int:video_id>", methods=["POST"])
+@login_required
+def delete_video(video_id):
+    video = Video.query.get_or_404(video_id)
+    if video.user_id == current_user.id:
+        db.session.delete(video)
+        db.session.commit()
+    return redirect(url_for("index"))
 
 @app.route("/channel/<username>")
 def channel(username):
@@ -136,13 +124,17 @@ def channel(username):
     videos = Video.query.filter_by(user_id=user.id).all()
     return render_template("channel.html", user=user, videos=videos)
 
+@app.route("/subscribe/<username>", methods=["POST"])
+def subscribe(username):
+    user = User.query.filter_by(username=username).first_or_404()
+    user.subscribers += 1
+    db.session.commit()
+    return redirect(url_for("channel", username=username))
 
-# ========================
-# MAIN
-# ========================
+# Create DB + uploads folder
+with app.app_context():
+    db.create_all()
+    os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+
 if __name__ == "__main__":
-    # Ensure database exists
-    if not os.path.exists("app.db"):
-        with app.app_context():
-            db.create_all()
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=8080)
